@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: 'Creates a PSQL database using Amazon RDS'
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+
+  DBName:
+    Default: QLedger
+    Description: The database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric
+      characters
+  
+  DBUser:
+    Default: 'postgres'
+    NoEcho: 'true'
+    Description: The database admin account username
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric
+      characters
+  
+  DBPassword:
+    NoEcho: 'true'
+    Description: The database admin account password
+    Type: String
+    MinLength: '1'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]+'
+    ConstraintDescription: Must contain only alphanumeric characters
+  
+  DBAllocatedStorage:
+    Default: '10'
+    Description: The size of the database (Gb)
+    Type: Number
+    MinValue: '10'
+    MaxValue: '50'
+    ConstraintDescription: Must be between 10 and 50Gb
+  
+  DBInstanceClass:
+    Description: The database instance type
+    Type: String
+    Default: db.t2.micro
+    AllowedValues: [db.t1.micro, db.m1.small, db.m1.medium, db.m1.large, db.m1.xlarge,
+      db.m2.xlarge, db.m2.2xlarge, db.m2.4xlarge, db.m3.medium, db.m3.large, db.m3.xlarge,
+      db.m3.2xlarge, db.m4.large, db.m4.xlarge, db.m4.2xlarge, db.m4.4xlarge, db.m4.10xlarge,
+      db.r3.large, db.r3.xlarge, db.r3.2xlarge, db.r3.4xlarge, db.r3.8xlarge, db.m2.xlarge,
+      db.m2.2xlarge, db.m2.4xlarge, db.cr1.8xlarge, db.t2.micro, db.t2.small, db.t2.medium,
+      db.t2.large]
+    ConstraintDescription: Must select a valid database instance type
+ 
+  DBSubnetGroupName:
+    Description: "Name of the private subnet group that contains the database"
+    Type: String
+
+  SecurityGroup:
+    Description: Security Group to use for the database
+    Type: AWS::EC2::SecurityGroup::Id
+
+Resources:
+  Database:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: !Ref DBName
+      AllocatedStorage: !Ref DBAllocatedStorage
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: 'postgres'
+      EngineVersion: '12.4'
+      MasterUsername: !Ref DBUser
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroupName
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName} PSQL DB
+      VPCSecurityGroups: 
+        - !Ref 'SecurityGroup'
+    DeletionPolicy: Snapshot
+  
+Outputs:
+ DBUrl:
+    Description:  The URL used to connect to the DB (without credentials)
+    Value: !Join ['', [!GetAtt [Database, Endpoint.Address], ':',
+        !GetAtt [Database, Endpoint.Port], /, !Ref 'DBName']]

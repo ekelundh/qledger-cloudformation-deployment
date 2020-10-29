@@ -1,0 +1,151 @@
+Description: >
+  This template deploys a VPC, with a pair of public and private subnets spread 
+  across two Availabilty Zones. It deploys an Internet Gateway, with a default 
+  route on the public subnets, and a DBSubnetGroup for the two private subnets.
+
+  It then deploys a highly available ECS cluster using an AutoScaling Group, with 
+  ECS hosts distributed across multiple Availability Zones, as well as an RDS PSQL Database
+  and a Application Load Balancer.
+
+  Finally, it deploys a pair of example ECS services from containers published in ECR.
+
+  For the sake of convenience, all parameters have defaults, including secrets. It is highly
+  recommended to use something other than the default for these secrets.
+
+Parameters:
+  VpcCIDR:
+    Description: IP range (CIDR notation) of the VPC
+    Type: String
+
+  CloudFormationTemplateS3BucketName:
+    Description: Name of S3Bucket where CF templates reside.
+    Type: String
+
+  PublicSubnet1CIDR:
+    Description: IP range (CIDR notation) of the public subnet in the first Availability Zone
+    Type: String
+
+  PublicSubnet2CIDR:
+    Description: IP range (CIDR notation) of the public subnet in the second Availability Zone
+    Type: String
+
+  PrivateSubnet1CIDR:
+    Description: IP range (CIDR notation) of the private subnet in the first Availability Zone
+    Type: String
+
+  PrivateSubnet2CIDR:
+    Description: IP range (CIDR notation) of the private subnet in the second Availability Zone
+    Type: String
+
+  QLedgerContainerRepositoryUrl:
+    Description: "The URI to the QLedger container that will be deployed. This should include tag name"
+    Type: String
+
+  DBUser:
+    NoEcho: true
+    Description: The database admin account username
+    Type: String
+    MinLength: 1
+    MaxLength: 16
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters
+
+  DBPassword:
+    NoEcho: true
+    Description: The database admin account password
+    Type: String
+    MinLength: 1
+    MaxLength: 41
+    AllowedPattern: '[a-zA-Z0-9]+'
+    ConstraintDescription: Must contain only alphanumeric characters
+
+  ApiToken:
+    NoEcho: true
+    Description: Token used to authenticate privileged API endpoints
+    Type: String
+    
+
+Resources:
+  VPC:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Join ['', ['https://', !Ref CloudFormationTemplateS3BucketName, '.s3.amazonaws.com/infrastructure/vpc.yml']]
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        VpcCIDR: !Ref VpcCIDR
+        PublicSubnet1CIDR: !Ref PublicSubnet1CIDR
+        PublicSubnet2CIDR: !Ref PublicSubnet2CIDR
+        PrivateSubnet1CIDR: !Ref PrivateSubnet1CIDR
+        PrivateSubnet2CIDR: !Ref PrivateSubnet2CIDR
+  
+  SecurityGroups:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Join ['', ['https://', !Ref CloudFormationTemplateS3BucketName, '.s3.amazonaws.com/infrastructure/security-groups.yml']]
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        VPC: !GetAtt VPC.Outputs.VPC
+
+  Database:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Join ['', ['https://', !Ref CloudFormationTemplateS3BucketName, '.s3.amazonaws.com/infrastructure/rds-psql-database.yml']]
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        DBName: 'QLedger'
+        DBUser: !Ref DBUser
+        DBPassword: !Ref DBPassword
+        DBAllocatedStorage: 20
+        DBInstanceClass: 'db.t2.micro'
+        DBSubnetGroupName: !GetAtt VPC.Outputs.DBPrivateSubnetGroupName
+        SecurityGroup: !GetAtt SecurityGroups.Outputs.RDSSecurityGroup
+
+  ALB:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Join ['', ['https://', !Ref CloudFormationTemplateS3BucketName, '.s3.amazonaws.com/infrastructure/load-balancer.yml']]
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        VPC: !GetAtt VPC.Outputs.VPC
+        Subnets: !GetAtt VPC.Outputs.PublicSubnets
+        SecurityGroup: !GetAtt SecurityGroups.Outputs.LoadBalancerSecurityGroup
+
+  ECS:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Join ['', ['https://', !Ref CloudFormationTemplateS3BucketName, '.s3.amazonaws.com/infrastructure/ecs-cluster.yml']]
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        InstanceType: 't2.micro'
+        ClusterSize: 2
+        VPC: !GetAtt VPC.Outputs.VPC
+        SecurityGroup: !GetAtt SecurityGroups.Outputs.ECSHostSecurityGroup
+        Subnets: !GetAtt VPC.Outputs.PublicSubnets
+  
+  WebServer:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Join ['', ['https://', !Ref CloudFormationTemplateS3BucketName, '.s3.amazonaws.com/service/qledger-webserver.yml']]
+      Parameters:
+        VPC: !GetAtt VPC.Outputs.VPC
+        Cluster: !GetAtt ECS.Outputs.Cluster
+        DesiredCount: 2
+        Listener: !GetAtt ALB.Outputs.Listener
+        Path: '/*'
+        ApiPort: 7000
+        ImageUrl: !Ref QLedgerContainerRepositoryUrl
+        ApiToken: !Ref ApiToken
+        DbConnectionUrl: !Join ["", ['postgres://', !Ref DBUser, ':', !Ref DBPassword, '@', !GetAtt Database.Outputs.DBUrl]]
+
+  LifecycleHook:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Join ['', ['https://', !Ref CloudFormationTemplateS3BucketName, '.s3.amazonaws.com/infrastructure/lifecyclehook.yml']]
+      Parameters:
+        Cluster: !GetAtt ECS.Outputs.Cluster
+        ECSAutoScalingGroupName: !GetAtt ECS.Outputs.ECSAutoScalingGroupName
+
+Outputs:
+  WebServerRootUrl:
+    Description: The Root URL endpoint for the API service
+    Value: !Join ["", [!GetAtt ALB.Outputs.LoadBalancerUrl, "/qledger"]]

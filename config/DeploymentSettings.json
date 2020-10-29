@@ -1,0 +1,13 @@
+{
+
+    "VpcCIDR": "10.1.0.0/16",
+    "CloudFormationTemplateS3BucketName": "qledger-cloudformation-templates",
+    "PublicSubnet1CIDR": "10.1.0.0/24",
+    "PublicSubnet2CIDR": "10.1.2.0/24",
+    "PrivateSubnet1CIDR": "10.1.4.0/24",
+    "PrivateSubnet2CIDR": "10.1.6.0/24",
+    "QLedgerContainerRepositoryUrl": "347708694192.dkr.ecr.us-east-1.amazonaws.com/qledger:latest",
+    "DatabaseUsername": "postgres",
+    "DatabasePassword": "Welcome1234",
+    "QLedgerApiToken":  "Bonjour4321"
+}   

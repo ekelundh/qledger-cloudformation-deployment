@@ -1,0 +1,159 @@
+Description: >
+  Creates a long running service on a specified ECS cluster
+
+Parameters:
+  VPC:
+    Description: The VPC that the ECS cluster is deployed to
+    Type: AWS::EC2::VPC::Id
+
+  Cluster:
+    Description: The Cluster ID that the service should run on
+    Type: String
+
+  DesiredCount:
+    Description: Number of QLedger webserver instnaces to run
+    Type: Number
+
+  Listener:
+    Description: The Application Load Balancer listener to register with
+    Type: String
+
+  Path:
+    Description: The path to register with the Application Load Balancer
+    Type: String
+
+  ApiPort:
+    Description: The port that the QLedger Webserver listens to for incoming API requests.
+    Type: Number
+
+  ImageUrl:
+    Description: "The URI to the QLedger container that will be deployed. This should include tag name"
+    Type: String
+
+  ApiToken:
+    NoEcho: 'true'
+    Description: Token used to authenticate privileged API endpoints
+    Type: String
+
+  DbConnectionUrl:
+    NoEcho: 'true'
+    Description: Url of PSQL DB to connect to, in the format of [postgres://USERNAME:PASSWORD@HOST:PORT/DB_NAME]
+    Type: String
+
+Resources:
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: ListenerRule
+    Properties:
+      Cluster: !Ref Cluster
+      Role: !Ref ServiceRole
+      DesiredCount: !Ref DesiredCount
+      TaskDefinition: !Ref TaskDefinition
+      LoadBalancers:
+        - ContainerName: "qledger-webserver"
+          ContainerPort: !Ref ApiPort
+          TargetGroupArn: !Ref TargetGroup
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: qledger-webserver
+      ContainerDefinitions:
+        - Name: qledger-webserver
+          Essential: true
+          Image: !Ref ImageUrl
+          Memory: 256
+          PortMappings:
+            - HostPort: 80
+              ContainerPort: !Ref ApiPort
+          Environment:
+            - Name: 'PORT'
+              Value: !Ref ApiPort
+            - Name: 'DATABASE_URL'
+              Value: !Ref DbConnectionUrl
+            - Name: 'MIGRATION_FILES_PATH'
+              Value: 'file:///go/src/github.com/RealImage/QLedger/migrations/postgres'
+            - Name:  'LEDGER_AUTH_TOKEN'
+              Value: !Ref ApiToken
+            - Name: HOST_PREFIX
+              Value: '/qledger'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CloudWatchLogsGroup
+              awslogs-region: !Ref AWS::Region
+
+  CloudWatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref AWS::StackName
+      RetentionInDays: 30
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VPC
+      Port: 80
+      Protocol: HTTP
+      Matcher:
+        HttpCode: 200
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /qledger/ping
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+
+  ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref Listener
+      Priority: 2
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - !Ref Path
+      Actions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+
+  # This IAM Role grants the service access to register/unregister with the
+  # Application Load Balancer (ALB). It is based on the default documented here:
+  # http://docs.aws.amazon.com/AmazonECS/latest/developerguide/service_IAM_role.html
+  ServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ecs-service-${AWS::StackName}
+      Path: /
+      AssumeRolePolicyDocument: |
+        {
+            "Statement": [{
+                "Effect": "Allow",
+                "Principal": { "Service": [ "ecs.amazonaws.com" ]},
+                "Action": [ "sts:AssumeRole" ]
+            }]
+        }
+      Policies:
+        - PolicyName: !Sub ecs-service-${AWS::StackName}
+          PolicyDocument:
+            {
+              "Version": "2012-10-17",
+              "Statement":
+                [
+                  {
+                    "Effect": "Allow",
+                    "Action":
+                      [
+                        "ec2:AuthorizeSecurityGroupIngress",
+                        "ec2:Describe*",
+                        "elasticloadbalancing:DeregisterInstancesFromLoadBalancer",
+                        "elasticloadbalancing:Describe*",
+                        "elasticloadbalancing:RegisterInstancesWithLoadBalancer",
+                        "elasticloadbalancing:DeregisterTargets",
+                        "elasticloadbalancing:DescribeTargetGroups",
+                        "elasticloadbalancing:DescribeTargetHealth",
+                        "elasticloadbalancing:RegisterTargets",
+                      ],
+                    "Resource": "*",
+                  },
+                ],
+            }

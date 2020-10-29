@@ -1,0 +1,48 @@
+Description: >
+  This template deploys a private S3 Bucket with no versioning, as well as an ECR repository.
+  These are both needed to run the prod deployment. You should not have multiple instances of this stack.    
+
+Parameters:
+  S3BucketName:
+    Description: Name for S3 Bucket
+    Type: String
+    Default: 'qledger-cloudformation-templates'
+  ECRName:
+    Description: Name for ECR
+    Type: String
+    Default: 'qledger'
+
+Resources:
+  ECR:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref ECRName
+      Tags:
+        - Key: Name
+          Value: QLedger ECR      
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketName
+      PublicAccessBlockConfiguration: 
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: QLedger S3
+
+Outputs:
+  BucketName:
+    Value: !Ref 'S3Bucket'
+    Description: Name of the created S3 bucket
+    
+  S3BucketDomainName:
+    Description: The URL to the bucket
+    Value: !GetAtt S3Bucket.DomainName
+  
+  ECRName:
+    Description: The name of the ECR repository created
+    Value: !Ref ECR
