@@ -1,8 +1,5 @@
 #Requires -Version 6.0
 
-# Quick and dirty script to get ECR and S3 bucket up.
-# S3 bucket will be filled with CF templates needed to deploy QLedger
-
 [CmdletBinding()]
 param (
     [Parameter()]

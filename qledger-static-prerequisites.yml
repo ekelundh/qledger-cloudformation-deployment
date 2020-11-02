@@ -1,6 +1,6 @@
 Description: >
   This template deploys a private S3 Bucket with no versioning, as well as an ECR repository.
-  These are both needed to run the prod deployment. You should not have multiple instances of this stack.    
+  These are both needed to run the prod deployment, but have a different lifecycle.  
 
 Parameters:
   S3BucketName:

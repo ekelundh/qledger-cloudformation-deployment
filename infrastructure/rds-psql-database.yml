@@ -1,5 +1,3 @@
-AWSTemplateFormatVersion: '2010-09-09'
-
 Description: 'Creates a PSQL database using Amazon RDS'
 
 Parameters:
