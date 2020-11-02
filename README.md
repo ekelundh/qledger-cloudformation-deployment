@@ -41,13 +41,7 @@ Finally, deployment settings are located in the `DeploymentSettings.json` file l
 - validate service is working using any desired endpoints, base URL of service specified in the output of `Deploy-QLedgerProductionDeployment.ps1`
 
 ### Prepare your local environment
-You will need to install the AWS CLI (2+), PowerShell Core (7 LTS), and Docker on your machine. You should also have git on this machine
-so that you can clone this repository and the QLedger repository. The user should have permission to use docker without the use of sudo/elevated permissions.
-The following software is required to be installed on your machine before running:
-  - Git
-  - PowerShell Core 6+
-  - AWS CLI (v2, but should work with v1)
-  - Docker (I used 19.03.13)
+You will need to install the AWS CLI (2+), PowerShell Core (7 LTS), Git, and Docker on your machine. You may run into permission issues if the executing user does not have permission to use docker without the use of sudo/elevated permissions.
  
 - [Git installation instructions](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git/)
 - [PowerShell Core installation instructions](https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell?view=powershell-7)
